@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 抓取过程中产生的中间产物，不要提交
+mem_links.json
+urls_clean.txt
+urls_final.txt
+urls_filtered.txt
+candidates_report.json
+orphan_list.json
+deleted_files.txt
+
+# 抓下来的文章内容（正文 / 图片 / 笔记），体量大且含第三方内容
+导出/
+articles/
+attachments/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
