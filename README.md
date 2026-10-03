@@ -23,7 +23,7 @@
 作为 WorkBuddy / Claude Code 的 Skill 使用：
 
 ```bash
-git clone https://github.com/<你的账号>/gongzhonghao-zhuaqu.git \
+git clone https://github.com/AMarvelousJ/gongzhonghao-zhuaqu.git \
     ~/.workbuddy/skills/gongzhonghao-zhuaqu
 ```
 
@@ -123,4 +123,4 @@ python scripts/check_images.py --dir "<库根目录>/Resources/<公众号名>"
 
 ## License
 
-[MIT](LICENSE) —— 记得把 `LICENSE` 里的 `Your Name` 换成你自己的名字。
+[MIT](LICENSE)
