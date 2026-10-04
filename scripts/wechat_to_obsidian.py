@@ -226,9 +226,17 @@ CONTENT_JS_RE = re.compile(r"content_noencode:\s*'((?:[^'\\]|\\.)*)'")
 
 
 def js_unescape(s: str) -> str:
-    return (s.replace("\\x0a", "\n").replace("\\n", "\n")
-             .replace("\\t", "\t").replace("\\'", "'").replace('\\"', '"')
-             .replace("\\\\", "\\"))
+    """还原 JS 字符串字面量里的转义。
+
+    微信把 < > " & 等字符写成 \\x3c \\x3e \\x22 \\x26 这类十六进制转义，
+    只替换 \\n / \\t 会留下满屏 \\x3cp\\x3e，正文完全不可读（实测 755 篇里
+    有 23 篇中招）。所以这里必须做通用 \\xHH / \\uXXXX 解码。
+    """
+    s = (s.replace("\\x0a", "\n").replace("\\n", "\n")
+         .replace("\\t", "\t").replace("\\'", "'").replace('\\"', '"'))
+    s = re.sub(r"\\x([0-9a-fA-F]{2})", lambda m: chr(int(m.group(1), 16)), s)
+    s = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), s)
+    return s.replace("\\\\", "\\")
 
 
 def body_from_js_content(html: str) -> str:
@@ -236,6 +244,18 @@ def body_from_js_content(html: str) -> str:
     if not m:
         return ""
     text = js_unescape(m.group(1))
+    # content_noencode 里既可能是纯文本，也可能是完整 HTML
+    # （<p>/<section>/<img data-src=...>）。是 HTML 就必须走 html_to_markdown
+    # 并补 data-src，否则正文会是一坨标签、图片也提取不到。
+    if re.search(r"<\s*(p|section|div|img|br|h[1-6]|ul|ol|li|span|strong)\b", text, re.I):
+        soup = BeautifulSoup(text, "lxml")
+        for img in soup.find_all("img"):
+            if not (img.get("src") or "").strip():
+                ds = img.get("data-src") or img.get("data-original") or ""
+                if ds:
+                    img["src"] = ds
+        inner = soup.body or soup
+        return html_to_markdown("".join(str(c) for c in inner.contents))
     # 纯文本正文：按空行分段，保留原有换行
     paras = [p.strip("\n") for p in re.split(r"\n\s*\n", text) if p.strip()]
     return "\n\n".join(paras) + "\n"

@@ -26,8 +26,23 @@ def norm(u: str) -> str:
         if "=" in seg:
             a, b = seg.split("=", 1)
             parts[a] = b
-    keep = ["__biz", "mid", "idx", "sn"]
-    out = {k: parts[k] for k in keep if k in parts}
+    keep = ["__biz", "mid", "idx", "sn", "chksm"]
+    out = {}
+    for k in keep:
+        if k not in parts:
+            continue
+        v = parts[k]
+        # 内存里的字符串常被覆写：sn/chksm 中间可能混入 \x00 等垃圾字节。
+        # sn 必须是 32 位 hex，chksm 必须是 16 位以上 hex，否则整条链接不可用。
+        if k == "sn":
+            v = re.sub(r"[^0-9a-f]", "", v.lower())
+            if len(v) != 32:
+                return ""
+        elif k == "chksm":
+            v = re.sub(r"[^0-9a-f]", "", v.lower())
+            if len(v) < 16:
+                continue          # chksm 坏了就别带，别拖累整条
+        out[k] = v
     if "__biz" not in out or "mid" not in out:
         return ""
     return "https://mp.weixin.qq.com/s?" + urlencode(out)
@@ -60,7 +75,9 @@ def main():
             ii = re.search(r"idx=(\d+)", n)
             ss = re.search(r"sn=([A-Za-z0-9]+)", n)
             key = (mm.group(1) if mm else n, ii.group(1) if ii else "1")
-            score = len(ss.group(1)) if ss else 0
+            # 有 chksm 的链接优先：实测部分公众号（如「快刀青衣」）缺 chksm 时
+            # 全部返回 17.7KB 空壳，哪怕 sn 完全正确。
+            score = (1000 if "chksm=" in n else 0) + (len(ss.group(1)) if ss else 0)
             if key not in bucket or score > bucket[key][0]:
                 bucket[key] = (score, n)
 
@@ -69,7 +86,10 @@ def main():
              if re.search(r"mid=(\d+)", u) else 0, reverse=True)
 
     print(f"输入 {len(raw)} 段内存字符串 → 目标公众号去重后 {len(out)} 条")
-    bad = [u for u in out if not re.search(r"sn=[A-Za-z0-9]{30,}", u)]
+    with_chksm = sum(1 for u in out if "chksm=" in u)
+    print(f"其中带 chksm 的：{with_chksm} 条 / {len(out)} 条"
+          f"（覆盖率低时要留意，缺 chksm 可能整批返回空壳）")
+    bad = [u for u in out if not re.search(r"sn=[0-9a-f]{32}", u)]
     print(f"其中 sn 可能被截断/缺失的：{len(bad)} 条（抓取时会校验，失败即丢弃）")
     pathlib.Path(args.dst).write_text("\n".join(out) + "\n", encoding="utf-8")
     print("已存:", args.dst)

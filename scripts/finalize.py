@@ -84,7 +84,10 @@ def main():
 
     # 2b) 把侥幸留下来的 "xxx (2).md" 改回干净名字（目标名没被占才改）
     used = {p.name for p in d.glob("*.md") if p.name != "00-索引.md"}
-    for p, _, _, _ in list(by_src.values()):
+    # ⚠️ 必须把改名后的新路径写回 by_src：下面 2c 还要按 by_src 里的路径删除
+    # 重复项，不写回的话它会去 unlink 一个已经 rename 掉的旧路径，
+    # 直接 FileNotFoundError 崩掉（实测 755 篇时触发）。
+    for key, (p, score, fm, body) in list(by_src.items()):
         m = re.search(r"^(.*) \((\d+)\)$", p.stem)
         if not m:
             continue
@@ -96,7 +99,7 @@ def main():
             p.rename(want)
             used.discard(p.name)
             used.add(want.name)
-            p = want
+            by_src[key] = (want, score, fm, body)
 
     # 2c) 二次去重：短链 /s/<id> 与分享链拿不到同一个 mid，
     #     用「标题 + 正文开头指纹」再收一遍。同名不同文（正文不同）不会误删。
@@ -112,7 +115,7 @@ def main():
             extra_dups.append(p)
     for p in extra_dups:
         print(f"  [删重复/同文异链] {p.name}")
-        if args.apply:
+        if args.apply and p.exists():
             p.unlink()
     by_src = {(k[0] if isinstance(k, tuple) else k): v for k, v in
               {("s:" + str(i)): v for i, v in enumerate(fp_map.values())}.items()}
