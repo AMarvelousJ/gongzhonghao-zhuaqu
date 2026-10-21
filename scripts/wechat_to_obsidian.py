@@ -28,6 +28,7 @@ import json
 import re
 import shutil
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -87,6 +88,36 @@ IMG_HTML_RE = re.compile(r'<img[^>]+?(?:src|data-src)=["\']([^"\']+)["\']', re.I
 
 def log(msg):
     print(msg, flush=True)
+
+
+# 并发写盘时的名字争用保护（--workers > 1 时用）
+_WRITE_LOCK = threading.Lock()
+# 文章内部图片下载的并发度；外层并发时会按 --workers 调小，避免把线程数吹爆
+IMG_WORKERS = 8
+
+
+def belongs_to(html: str, biz: str = "", name: str = "") -> bool:
+    """判定抓下来的页面是否真属于目标公众号。
+
+    内存里扫出来的链接是「粘连」字符串切出来的，mid/idx/sn 有可能串到了隔壁
+    文章的 biz 上。给 --biz 时在这里兜一道，串号的直接跳过，不写盘。
+    """
+    if not biz:
+        return True
+    head = html[:400000]
+    # 页面里明确写了 var biz = "xxx"：直接比对，串号的拒掉
+    m = re.search(r'var\s+biz\s*=\s*["\']([^"\']+)["\']', head)
+    if m:
+        return m.group(1) == biz
+    if re.search(r'__biz=%s' % re.escape(biz.replace("=", "%3D")), head):
+        return True
+    if name:
+        m = re.search(r'var\s+nickname\s*=\s*["\']([^"\']{1,60})["\']', head)
+        if m and name in m.group(1):
+            return True
+    # 页面里压根没有 biz 变量（新版「文字消息」页就是这样）——判不了就不拒，
+    # 宁可多抓一篇，也别把好文章丢了。真正的串号页面上面第一条就拦住了。
+    return True
 
 
 def clean_filename(name: str, maxlen: int = 80) -> str:
@@ -176,6 +207,20 @@ def strip_junk(text: str) -> str:
     return text.strip()
 
 
+def title_from_body(body: str, maxlen: int = 30) -> str:
+    """标题缺席时（微信「文字消息」），从正文首句提炼一个能当文件名的短标题。"""
+    if not body:
+        return ""
+    s = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", body)   # 去掉图片引用
+    s = s.replace("\\n", " ").replace("\\t", " ").replace("\r", " ")
+    s = re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"^[#>\-\*\s]+", "", s)              # 去掉 markdown 行首标记
+    if not s:
+        return ""
+    head = re.match(r"^(.{4,60}?)(?=[。！？!?；;])", s)
+    return (head.group(1) if head else s[:maxlen]).strip()[:maxlen].strip()
+
+
 def extract_meta_from_html(soup: BeautifulSoup) -> dict:
     def txt(sel):
         el = soup.select_one(sel)
@@ -191,7 +236,13 @@ def extract_meta_from_html(soup: BeautifulSoup) -> dict:
     # 注意别用 og:site_name —— 它恒为「微信公众平台」，会把真正的号名冲掉
     el = soup.find("meta", property="og:title")
     if el and el.get("content") and not meta.get("title"):
-        meta["title"] = el["content"].strip()
+        cand = el["content"].strip()
+        # ⚠️「文字消息」（无标题的短图文）页面里没有 var msg_title，而微信会把
+        #   og:title 填成**整篇正文**（还带着字面 \n\n）。直接拿来当标题会生成
+        #   长达几百字、满是「 n 」的文件名（实测花叔 386 篇里中招 11 篇）。
+        #   真实标题不会超 80 字、也不会含换行，用这两条把伪标题挡掉。
+        if len(cand) <= 80 and "\\n" not in cand and "\n" not in cand:
+            meta["title"] = cand
     el = soup.find("meta", attrs={"name": "author"})
     if el and el.get("content") and not meta.get("author"):
         meta["author"] = el["content"].strip()
@@ -414,7 +465,7 @@ def article_from_html(html: str, fallback_title: str = "", source: str = "") -> 
         images.append((url, url, ""))
 
     return Article(
-        title=meta.get("title") or fallback_title,
+        title=meta.get("title") or title_from_body(body) or fallback_title,
         body=body,
         date=normalize_date(meta.get("date", "")),
         author=meta.get("author", ""),
@@ -501,15 +552,17 @@ def collect_source_files(src: Path):
 def build_output(article: Article, vault: Path, account: str,
                  attach_dir: Path, image_mode: str, counter: dict) -> Path:
     """生成一篇 Obsidian 笔记，返回路径。"""
+    # 并发模式下先用锁挑名字并占位，避免两个线程算出同一个文件名
     target_dir = vault / "Resources" / clean_filename(account)
     target_dir.mkdir(parents=True, exist_ok=True)
-
-    fname = clean_filename(article.title) + ".md"
-    out = target_dir / fname
-    n = 2
-    while out.exists():
-        out = target_dir / f"{clean_filename(article.title)} ({n}).md"
-        n += 1
+    with _WRITE_LOCK:
+        fname = clean_filename(article.title) + ".md"
+        out = target_dir / fname
+        n = 2
+        while out.exists():
+            out = target_dir / f"{clean_filename(article.title)} ({n}).md"
+            n += 1
+        out.touch()  # 占位，稍后写正文
 
     body = article.body
 
@@ -532,7 +585,7 @@ def build_output(article: Article, vault: Path, account: str,
                 dest = attach_dir / f"{safe}{ext or guess_ext(url)}"
                 ok = download_image(url, dest)
                 return ref, (dest if ok else None)
-            with cf.ThreadPoolExecutor(max_workers=8) as ex:
+            with cf.ThreadPoolExecutor(max_workers=IMG_WORKERS) as ex:
                 results = dict(r for r in ex.map(_job, jobs) if r)
         else:
             results = {}
@@ -614,8 +667,16 @@ def main():
     ap.add_argument("--account", help="公众号名称（用作文件夹名，缺省自动推断）")
     ap.add_argument("--images", choices=["local", "remote", "strip"], default="local")
     ap.add_argument("--attach-dir", help="图片存放目录，默认 <vault>/Resources/<公众号>/attachments")
-    ap.add_argument("--delay", type=float, default=0.8, help="抓取间隔秒（仅 --urls 模式）")
+    ap.add_argument("--delay", type=float, default=0.8, help="抓取间隔秒（仅 --urls 模式，并发下基本用不到）")
+    ap.add_argument("--workers", type=int, default=6,
+                    help="并发抓取文章数（默认 6；实测 8 并发仍零风控，保守取 6）")
+    ap.add_argument("--biz", default="", help="目标公众号 biz，用于抓到后二次校验归属，串号的直接丢弃")
+    ap.add_argument("--no-index", action="store_true",
+                    help="不写 00-索引.md（增量更新时用，索引交给 wechat_sync 全量重建）")
     args = ap.parse_args()
+
+    global IMG_WORKERS
+    IMG_WORKERS = max(2, 8 // max(1, args.workers))
 
     vault = Path(args.vault)
     if not vault.is_dir():
@@ -667,26 +728,57 @@ def main():
     else:
         urls = [u.strip() for u in Path(args.urls).read_text(encoding="utf-8").splitlines()
                 if u.strip() and u.strip().startswith("http")]
-        log(f"待抓取 {len(urls)} 篇")
+        log(f"待抓取 {len(urls)} 篇（并发 {args.workers}）")
         if not account:
             account = "公众号文章"
         if attach_dir is None:
             attach_dir = vault / "Resources" / clean_filename(account) / "attachments"
 
-        for i, url in enumerate(urls, 1):
+        done = 0
+        skipped = 0
+
+        def handle(item):
+            i, url = item
+            nonlocal done, skipped
+            if args.workers <= 1 and args.delay:  # 串行模式才需要人为限速
+                time.sleep(args.delay)
             try:
-                art = article_from_html(fetch(url), source=url)
+                html = fetch(url)
             except Exception as e:
                 log(f"  [失败] {url}: {e}")
-                continue
+                return None
+            if not html:
+                log(f"  [失败] 空响应 {url[:60]}")
+                return None
+            if args.biz and not belongs_to(html, args.biz, account):
+                skipped += 1
+                log(f"  [跳过·非本号] {url[:70]}")
+                return None
+            try:
+                art = article_from_html(html, source=url)
+            except Exception as e:
+                log(f"  [失败] {url}: {e}")
+                return None
             if not art.title:
                 art.title = f"未命名-{i}"
             if account:
                 art.account = art.account or account
             out = build_output(art, vault, account, attach_dir, args.images, counter)
-            entries.append((out, art.date))
-            log(f"  [{i}/{len(urls)}] {art.date} {art.title[:30]}")
-            time.sleep(args.delay)
+            done += 1
+            log(f"  [{done}/{len(urls)}] {art.date} {art.title[:30]}")
+            return out, art.date
+
+        with cf.ThreadPoolExecutor(max_workers=max(1, args.workers)) as ex:
+            for r in ex.map(handle, enumerate(urls, 1)):
+                if r:
+                    entries.append(r)
+        if skipped:
+            log(f"（另有 {skipped} 条链接实际不属于本号，已丢弃）")
+
+    if args.no_index:
+        log(f"完成：{len(entries)} 篇 → {vault/'Resources'/clean_filename(account)}（--no-index，索引未重建）")
+        log(f"图片：本地 {counter['img_local']} / 下载成功 {counter['img_ok']} / 失败 {counter['img_fail']}")
+        return
 
     idx = write_index(vault, account, entries)
     log("")

@@ -103,16 +103,65 @@ def scan(pid, ids, fulls):
     return total
 
 
-if __name__ == "__main__":
-    out = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path("mem_links2.json")
+def scan2(pid):
+    """返回 (ids, fulls, bytes)，不共享集合，方便并发/多进程。"""
     ids, fulls = set(), set()
+    return ids, fulls, scan(pid, ids, fulls)
+
+
+def _scan2_star(args):
+    return scan2(args)
+
+
+if __name__ == "__main__":
+    import argparse
+    from concurrent.futures import as_completed
+    import time
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("out", nargs="?", default="mem_links2.json")
+    ap.add_argument("--workers", type=int, default=4,
+                    help="并发扫描进程数（默认 4）。默认走多进程：正则扫描是 GIL 密集的，"
+                         "多线程加速不了，必须多进程")
+    ap.add_argument("--threads", action="store_true",
+                    help="改用线程池而不是进程池（调试用，通常更慢）")
+    ap.add_argument("--biz", default="",
+                    help="只保留该 biz 的分享链，其余丢弃（省内存，也方便直接看命中数）")
+    args = ap.parse_args()
+    out = pathlib.Path(args.out)
+
+    jobs = []
     for name in ("Weixin.exe", "WeChatAppEx.exe"):
         for pid in pids_by_name(name):
-            b1, b2 = len(ids), len(fulls)
-            mb = scan(pid, ids, fulls) / 1024 / 1024
-            print(f"{name} pid={pid}: {mb:.0f}MB，id +{len(ids)-b1}，完整链 +{len(fulls)-b2}", flush=True)
+            jobs.append((name, pid))
+
+    t0 = time.time()
+    ids, fulls = set(), set()
+    if args.threads or args.workers <= 1:
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+        ex = ThreadPoolExecutor(max_workers=max(1, args.workers))
+    else:
+        from concurrent.futures import ProcessPoolExecutor
+        ex = ProcessPoolExecutor(max_workers=max(1, args.workers))
+    with ex:
+        futs = {ex.submit(_scan2_star, pid): (name, pid) for name, pid in jobs}
+        for fut in as_completed(futs):
+            name, pid = futs[fut]
+            try:
+                i, f, b = fut.result()
+            except Exception as e:
+                print(f"{name} pid={pid}: 失败 {e}", flush=True)
+                continue
+            ids |= i
+            fulls |= f
+            print(f"{name} pid={pid}: {b/1024/1024:.0f}MB，id +{len(i)}，完整链 +{len(f)}", flush=True)
 
     links = sorted({"https://mp.weixin.qq.com/s/" + i for i in ids} | fulls)
-    print(f"\n合计 {len(links)} 条（裸 id {len(ids)} + 分享链 {len(fulls)}）")
+    if args.biz:
+        b = args.biz
+        bq = b.replace("=", "%3D")
+        links = [u for u in links if (b in u or bq in u)]
+    print(f"\n合计 {len(links)} 条（裸 id {len(ids)} + 分享链 {len(fulls)}），耗时 {time.time()-t0:.0f}s")
     out.write_text(json.dumps(links, ensure_ascii=False, indent=1), encoding="utf-8")
     print("已存:", out)

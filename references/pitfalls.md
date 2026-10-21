@@ -160,7 +160,62 @@ def images_from_picture_pages(html):
 
 ### B. 图集型：见上文第三节第 4 条
 
+### C-2. 文字消息：没有标题，`og:title` 被填成整篇正文
+
+微信的「文字消息」（无标题短图文）页面里**没有 `var msg_title`**，而 `og:title` 会被
+塞进**整篇正文**，还带着字面 `\n\n`。如果照单全收当标题，就得到几百字长、
+文件名里满是「 n 」的鬼东西（实测花叔 386 篇里中招 19 篇）。
+
+```python
+cand = og_title.strip()
+# 真标题不会超 80 字、也不会含换行
+if len(cand) <= 80 and "\\n" not in cand and "\n" not in cand:
+    meta["title"] = cand
+```
+
+挡掉之后标题为空 → 从正文首句提炼（先把字面 `\n` 转成空格，取第一个句末标点前的一句，截断 30 字）：
+
+```python
+def title_from_body(body, maxlen=30):
+    s = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", body)
+    s = s.replace("\\n", " ").replace("\r", " ")
+    s = re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"^[#>\-\*\s]+", "", s)
+    m = re.match(r"^(.{4,60}?)(?=[。！？!?；;])", s)
+    return (m.group(1) if m else s[:maxlen]).strip()[:maxlen].strip()
+```
+
+⚠️ **补救时别用「标题过长」当判定标准**：有些文章标题本来就有 60+ 字（微信上限 64），
+一刀切会误伤。实测按这个标准改了 19 篇，其中 3 篇是「本来就有真标题」被改坏的。
+正确做法是**回原文重查 `var msg_title`，查得到就还原**，查不到才用提炼值。
+
 ### C. 普通文章：走 `#js_content` DOM
+
+### 4.5 数 `<img ... data-src=` 判断「有几张图」时会混进 JS 里的 emoji 模板
+
+页面 JS 里有这么一段（生成微信自定义表情的函数）：
+
+```js
+var k=function(e){var t=e.className,n=e.text,r=e.src;
+  return'<img src="'.concat(l["a"],'" class="we-emoji ').concat(t,'" alt="').concat(n,'" data-src="').concat(r,'" />')};
+```
+
+它里面那句 `'... data-src="'` **会被 `<img[^>]+data-src=` 正则命中** —— 于是每篇都被数成
+「恰好 1 张图」，看起来像「所有文章都漏抓了一张」。
+
+实测（花叔 386 篇）：无图笔记抽 8 篇，8 篇全部报「漏抓 1 张」，全是这个模板。
+**过滤办法**：排除 `class="we-emoji"`，或者只在 `#js_content` 内部统计。
+
+```python
+n_img = len(re.findall(r'<img(?![^>]*we-emoji)[^>]+data-src=', h))
+```
+
+### 5. 「每篇恰好 N 张」一律先怀疑假象
+
+不用管具体数字是多少，**只要抽样里每篇数量完全一样，基本就是页面级元素在贡献计数**：
+封面 `og:image`、头像 `round_head_img`、`msg_cdn_url`、UI 图标都混得进来
+（历史上出现过「每篇恰好 4 张」）。真要看几张图，去 `#js_content` 内部数，
+并同时检查 `picture_page_info_list` 是否非空。
 
 ### 归属 / 元数据的坑
 
