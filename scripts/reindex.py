@@ -18,7 +18,7 @@ FM_TITLE = re.compile(r'^title:\s*"?(.+?)"?\s*$', re.M)
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dir", required=True, help="公众号笔记目录，如 <vault>/Resources/橘AI")
+    ap.add_argument("--dir", required=True, help="公众号笔记目录，如 <vault>/Resources/<公众号名>")
     ap.add_argument("--account", default=None, help="公众号名；省略时取目录名")
     args = ap.parse_args()
 

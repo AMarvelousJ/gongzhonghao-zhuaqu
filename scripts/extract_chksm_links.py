@@ -4,7 +4,7 @@
 
 什么时候用它
 ------------
-正常流程是 mem_scan_links.py → clean_links.py。但实测有公众号（如「快刀青衣」）
+正常流程是 mem_scan_links.py → clean_links.py。但实测有公众号（如某号）
 靠 clean_links.py 产出的链接（只有 __biz/mid/idx/sn）**全部**返回 17.7KB 空壳，
 必须把原始 URL 里的 `chksm=` 一起带上才能拿到正文。
 判断方法：clean_links.py 现在会打印 chksm 覆盖率；若抓出来大批空壳且覆盖率很低，

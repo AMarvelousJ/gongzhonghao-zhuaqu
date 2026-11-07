@@ -3,10 +3,10 @@
 """一条命令跑完「公众号 → Obsidian」的全流程，并且天然支持增量。
 
 首次：
-    python wechat_sync.py --account 橘AI --biz MzkwMzY5NzU2Nw== --vault D:\\vibecoding\\Obsidian\\WhisperSands
+    python wechat_sync.py --account <公众号名> --biz <biz> --vault D:\\vibecoding\\Obsidian\\WhisperSands
 
 以后（biz / vault 都记在注册表里，直接一句）：
-    python wechat_sync.py --account 橘AI          # 只抓上次之后的新文章
+    python wechat_sync.py --account <公众号名>    # 只抓上次之后的新文章
     python wechat_sync.py --all                   # 注册表里所有号轮流更新
 
 流程：

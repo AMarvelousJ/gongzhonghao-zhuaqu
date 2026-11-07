@@ -3,8 +3,8 @@
 """公众号抓取 MCP 服务。
 
 把 gongzhonghao-zhuaqu 这套脚本包装成 MCP 工具，Agent 里一句话就能跑：
-    「更新一下橘AI的公众号文章」
-    「看看橘AI有没有新文章」
+    「更新一下我关注的号的公众号文章」
+    「看看某个号有没有新文章」
 
 前提：
   * Windows + 电脑上登录着 PC 微信（要扫进程内存拿文章链接）
@@ -97,7 +97,7 @@ def wechat_list_accounts() -> str:
 def wechat_preview_new(account: str, biz: str = "", vault: str = "") -> str:
     """只看看某个公众号有没有新文章，不抓取。会扫描微信内存（约 45 秒）。
 
-    account: 公众号名，如「橘AI」
+    account: 公众号名，如「某公众号」
     biz:     首次必须给；之后注册表里有，可省略
     vault:   Obsidian 库根目录，首次必须给
     """
@@ -119,7 +119,7 @@ def wechat_update_account(account: str, biz: str = "", vault: str = "",
                           mode: str = "auto", workers: int = 6) -> str:
     """抓取某个公众号的文章到 Obsidian，默认只抓新文章（增量）。
 
-    account: 公众号名，如「橘AI」
+    account: 公众号名，如「某公众号」
     biz:     首次必须给；之后注册表里有，可省略
     vault:   Obsidian 库根目录，如 D:\\vibecoding\\Obsidian\\WhisperSands；首次必须给
     mode:    auto=只抓新文章（默认）；full=无视已有笔记重抓全部
@@ -153,7 +153,7 @@ def wechat_find_biz(name: str) -> str:
     """不知道某个公众号的 biz 时用它：扫描微信进程内存，找号名附近出现的 __biz。
 
     用之前请先在微信里打开这个号的任意一篇文章或主页。
-    name: 公众号名，如「橘AI」
+    name: 公众号名，如「某公众号」
     """
     out_file = STATE / "work" / "ctx_hits.json"
     out_file.parent.mkdir(parents=True, exist_ok=True)

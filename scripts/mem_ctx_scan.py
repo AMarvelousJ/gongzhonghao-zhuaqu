@@ -6,8 +6,8 @@
 按数量排第一的不一定是目标号。这里直接搜名字，看名字旁边跟着哪个 biz。
 
 用法:
-    python mem_ctx_scan.py --name "哥飞"
-    python mem_ctx_scan.py --name "刘小排" --out ctx_hits.json
+    python mem_ctx_scan.py --name "某公众号"
+    python mem_ctx_scan.py --name "某公众号" --out ctx_hits.json
 
 同时试 UTF-8、UTF-16LE、拼音三种编码。结果里 biz_nearby 出现次数最多的那个基本就是目标。
 仅 Windows。
@@ -128,7 +128,7 @@ def scan(pid, needles, hits, biz_counter):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--name", required=True, help="要找的公众号名，如 「哥飞」")
+    ap.add_argument("--name", required=True, help="要找的公众号名，如 「某公众号」")
     ap.add_argument("--out", default="ctx_hits.json")
     args = ap.parse_args()
 

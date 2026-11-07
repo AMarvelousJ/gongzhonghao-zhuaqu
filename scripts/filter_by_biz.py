@@ -34,7 +34,7 @@ NICK_RE2 = re.compile(rb'nickname["\']?\s*[:=]\s*["\']([^"\']{1,60})["\']')
 TITLE_RE = re.compile(rb'var\s+msg_title\s*=\s*["\']([^"\']{1,200})["\']')
 SHELL_MARK = ("环境异常", "请在微信客户端打开", "系统繁忙")
 # 只读前 120KB：新版「文字消息」页的 var biz / nickname 出现得很靠后，
-# 40KB 不够用（实测橘AI 最新两篇在 40KB 内连 biz 字符串都搜不到）
+# 40KB 不够用（实测某号最新两篇在 40KB 内连 biz 字符串都搜不到）
 PROBE_BYTES = 120000
 
 
@@ -42,7 +42,7 @@ def _probe_once(url: str, timeout=12, biz="", name="", args_biz=""):
     """只读前 40KB 判断归属。返回 (ok, biz, nickname, title, shell, mine)。
 
     ⚠️ 「文字消息」型页面（短图文）前 40KB 里可能还没有 `var biz =` 那几行 JS 变量，
-    只靠正则解析会全部判成「不属于本号」（实测橘AI 最新两篇就是这样被误杀的）。
+    只靠正则解析会全部判成「不属于本号」（实测某号最新两篇就是这样被误杀的）。
     所以额外保留一条兜底：页面片段里**出现过**目标 biz 字符串即可判定归属。
     """
     try:

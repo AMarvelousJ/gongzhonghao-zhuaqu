@@ -239,7 +239,7 @@ def extract_meta_from_html(soup: BeautifulSoup) -> dict:
         cand = el["content"].strip()
         # ⚠️「文字消息」（无标题的短图文）页面里没有 var msg_title，而微信会把
         #   og:title 填成**整篇正文**（还带着字面 \n\n）。直接拿来当标题会生成
-        #   长达几百字、满是「 n 」的文件名（实测花叔 386 篇里中招 11 篇）。
+        #   长达几百字、满是「 n 」的文件名（实测某号 386 篇里中招 11 篇）。
         #   真实标题不会超 80 字、也不会含换行，用这两条把伪标题挡掉。
         if len(cand) <= 80 and "\\n" not in cand and "\n" not in cand:
             meta["title"] = cand

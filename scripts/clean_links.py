@@ -75,7 +75,7 @@ def main():
             ii = re.search(r"idx=(\d+)", n)
             ss = re.search(r"sn=([A-Za-z0-9]+)", n)
             key = (mm.group(1) if mm else n, ii.group(1) if ii else "1")
-            # 有 chksm 的链接优先：实测部分公众号（如「快刀青衣」）缺 chksm 时
+            # 有 chksm 的链接优先：实测部分公众号（如某号）缺 chksm 时
             # 全部返回 17.7KB 空壳，哪怕 sn 完全正确。
             score = (1000 if "chksm=" in n else 0) + (len(ss.group(1)) if ss else 0)
             if key not in bucket or score > bucket[key][0]:

@@ -9,8 +9,8 @@ agent_created: true
 ## 最快用法（一句话，日常就走这条）
 
 ```bash
-<python> scripts/wechat_sync.py --account "橘AI"          # 增量：只抓新文章 + 更新索引
-<python> scripts/wechat_sync.py --account "橘AI" --biz "<biz>" --vault "<库根>"   # 首次
+<python> scripts/wechat_sync.py --account "<公众号名>"          # 增量：只抓新文章 + 更新索引
+<python> scripts/wechat_sync.py --account "<公众号名>" --biz "<biz>" --vault "<库根>"   # 首次
 <python> scripts/wechat_sync.py --all                     # 注册表里所有号轮流更新
 <python> scripts/wechat_sync.py --list                    # 看看都收录了哪些号
 ```
@@ -20,7 +20,7 @@ biz / vault / 上次同步时间记在 `~/.workbuddy/state/gongzhonghao-zhuaqu/a
 **第二次开始不带任何参数也能跑**。
 
 也配了 MCP 服务（`mcp/server.py`，已注册到 `~/.workbuddy/mcp.json` 的
-`gongzhonghao-zhuaqu`），Agent 里直接说「更新一下橘AI的公众号文章」即可，
+`gongzhonghao-zhuaqu`），Agent 里直接说「更新一下我关注的号的公众号文章」即可，
 工具见文末「MCP 用法」。
 
 ## 用途
@@ -48,7 +48,7 @@ biz / vault / 上次同步时间记在 `~/.workbuddy/state/gongzhonghao-zhuaqu/a
    而全部丢失（实测 755 篇里 23 篇中招）。已修在 `js_unescape()` + `body_from_js_content()`。
 10. **`og:title` 只在「≤80 字且不含换行」时才可信**（2026-10-05 踩到）：微信「文字消息」
     没有 `var msg_title`，此时 `og:title` 会被塞满**整篇正文**（含字面 `\n\n`），
-    直接当标题会生成几百字长、满是「 n 」的文件名（花叔 386 篇中 19 篇）。
+    直接当标题会生成几百字长、满是「 n 」的文件名（某号 386 篇中 19 篇）。
     挡掉之后用正文首句提炼。**补救时不要用「标题长」当判定标准** —— 有些标题本来就有
     60+ 字；要回原文重查 `var msg_title`，查得到就还原。已修在 `extract_meta_from_html()`
     + 新增 `title_from_body()`。
@@ -102,7 +102,7 @@ var user_name = "gh_xxxxxxxxxxxx"
    首次全量时可以只抽样：`--sample 30`（其余按 URL 里的 `__biz` 直接放行，抓取阶段
    还有 `--biz` 再兜一道）。增量更新时新链接少，走全量校验。
    ⚠️ 判定是**三态**的，别再加严格判据：只有页面里明确出现「别的 biz」才剔除；
-   新版「文字消息」页前 120KB 里连自己的 biz 字符串都没有（实测橘AI 最新两篇），
+   新版「文字消息」页前 120KB 里连自己的 biz 字符串都没有（实测某 AI 资讯号最新两篇），
    一律**判不出来就放行**——宁可多抓一篇，也不能把好文章丢了。
    ⚠️ `filter_by_biz.py` 早期版本会把相对路径拼到**脚本所在目录**，保险起见传绝对路径。
 
@@ -110,7 +110,7 @@ var user_name = "gh_xxxxxxxxxxxx"
 >
 > 1. **内存上下文扫描（推荐，最快最准）**：`scripts/mem_ctx_scan.py` 直接在微信进程内存里
 >    搜公众号名（同时试 UTF-8 / UTF-16LE），把命中位置 ±3KB 范围内出现的 `__biz=` 全统计出来。
->    实测搜「快刀青衣」命中 344 次，其中 `MjM5NjQyMjE1NA==` 占 99 次，一眼就能定，
+>    实测搜某个号名命中 344 次，其中某一个 biz 占 99 次，一眼就能定位，
 >    比统计 biz 分布靠谱得多（分布法容易被「用户还开着别的号」干扰）。
 >    ```bash
 >    <python> -u scripts/mem_ctx_scan.py        # 结果写 ctx_hits.json
@@ -126,7 +126,7 @@ var user_name = "gh_xxxxxxxxxxxx"
 
 > **最快的拿 biz 办法（不用问用户要链接）**：直接 WebSearch `<号名> 公众号 文章`，
 > 搜索结果里常能翻到 `mp.weixin.qq.com/s/xxx` 原文链接（或被转载的页面里带的「原文链接」）。
-> 拿任一链接跑一遍取 `var biz` / `var nickname` 即可确认。实测找「哥飞」的 biz 只花了一次搜索，
+> 拿任一链接跑一遍取 `var biz` / `var nickname` 即可确认。实测找某个号的 biz 只花了一次搜索，
 > 比让用户去微信里翻文章快得多。注意：必须先校验页面里的 `nickname` 确实是目标号，别认错号。
 
 > **扫描口径决定成败**：只匹配 `https://mp.weixin.qq.com/s/xxx` 只能捞到 8 条（漏 95%）；
@@ -153,7 +153,7 @@ var user_name = "gh_xxxxxxxxxxxx"
 
 导出目录模式用 `--src <目录>` 代替 `--urls`。
 
-**并发实测（橘AI，随机 60 篇 / 399 张图）**：`--workers 6` → 49s，`--workers 10` → 44s
+**并发实测（随机 60 篇 / 399 张图）**：`--workers 6` → 49s，`--workers 10` → 44s
 （边际收益很小还更招风控）。改造前串行版 546 篇要 26 分钟，现在约 **7 分钟**。默认就 6。
 
 > ⚠️ `write_index()` 只写**本次**抓的条目 → 增量跑必须加 `--no-index`，否则索引会被覆盖成只剩新文章。
@@ -185,7 +185,7 @@ var user_name = "gh_xxxxxxxxxxxx"
 ```
 （先预览再加 `--apply`；择优键是 `(imported 时间, 正文长度)`，**不能只比长度**，抓坏的模板文本可能更长）
 
-> ⚠️ 已知副作用：哥飞那批里，finalize 的二次去重（标题 + 正文前 150 字指纹）误删了 4 篇
+> ⚠️ 已知副作用：某个号那批里，finalize 的二次去重（标题 + 正文前 150 字指纹）误删了 4 篇
 > 「同一活动通知隔几天重发」的真文章 —— 它们标题和开头完全一致。要保留就得去掉 2c 那一段。
 > 已修：`finalize.py` 改名后必须把新路径写回 `by_src`，否则 2c 会 unlink 一个已被 rename 掉的
 > 旧路径 → FileNotFoundError 崩溃（实测触发）。
@@ -202,7 +202,7 @@ var user_name = "gh_xxxxxxxxxxxx"
 <python> scripts/fix_remote.py --dir "<vault>/Resources/<公众号名>"
 ```
 
-⚠️ 上述两个脚本都只认**微信图床**。少数老文章会直接贴外部图床（实测「快刀青衣」2014 年
+⚠️ 上述两个脚本都只认**微信图床**。少数老文章会直接贴外部图床（实测某号 2014 年
 几篇用了 `img.huxiu.com`），表现为「引用了但磁盘上有 5 个缺失」但 `fix_remote.py` 报 0 篇
 （因为引用已被改写成本地路径）。用下面这个补：
 ```bash
@@ -226,7 +226,7 @@ var user_name = "gh_xxxxxxxxxxxx"
 
 内存扫描的 `sn` 会被粘连字符串污染（尾部多出 `Zs`、`yMh%2F` 之类垃圾）或截断到只剩十几位。
 实测：把尾巴清掉能让链接从「参数错误」变成通过校验，但如果文章本身已删，照样是 17.7KB 空壳。
-补位暴力破解不划算（缺 2 位要试 256 次，实测全失败）。哥飞那批 762 条里有 4 条这种残缺链接。
+补位暴力破解不划算（缺 2 位要试 256 次，实测全失败）。某号那批 762 条里有 4 条这种残缺链接。
 
 ### Step 5 · 清理孤儿附件（需用户确认）
 
@@ -244,9 +244,9 @@ var user_name = "gh_xxxxxxxxxxxx"
 不依赖任何外部状态文件——笔记在，就知道抓过哪些；笔记被删了，下次自然补回来。
 
 ```bash
-<python> scripts/wechat_sync.py --account "橘AI"                       # 增量（biz/vault 从注册表读）
-<python> scripts/wechat_sync.py --account "橘AI" --dry-run             # 只看看有几篇新的，不抓
-<python> scripts/wechat_sync.py --account "橘AI" --mode full           # 无视已有笔记重抓全部
+<python> scripts/wechat_sync.py --account "<公众号名>"                       # 增量（biz/vault 从注册表读）
+<python> scripts/wechat_sync.py --account "<公众号名>" --dry-run             # 只看看有几篇新的，不抓
+<python> scripts/wechat_sync.py --account "<公众号名>" --mode full           # 无视已有笔记重抓全部
 <python> scripts/wechat_sync.py --all                                  # 所有已收录的号轮流更新
 <python> scripts/wechat_sync.py --list                                 # 列出收录情况
 ```
@@ -304,24 +304,26 @@ var user_name = "gh_xxxxxxxxxxxx"
 
 ## 已验证战绩
 
-| 公众号 | 扫描条数 | 筛出候选 | 最终入库 | 图片 | 体检结果 |
+> 号名已脱敏，只保留数据规模供参考（判断这套流程能不能撑住你那个号的量）。
+
+| 号类型 | 扫描条数 | 筛出候选 | 最终入库 | 图片 | 体检结果 |
 |---|---|---|---|---|---|
 | 某科技博主号 | 2577 | 199 | **197 篇** | 910 张本地化 | attachments 728 个 ↔ 正文引用 728 个，零缺失零孤儿 |
-| 比高（私域/流量方向） | 3673 | 197 | **187 篇** | 574 张本地化 | attachments 485 个 ↔ 正文引用 485 个，零缺失零孤儿（另有 10 条链接已失效，抓出来是「参数错误」空壳，已由 Step 3 丢弃） |
-| 哥飞（出海/SEO/独立开发） | 5518 | 762 | **741 篇** | 11746 张本地化 | attachments 10948 个 ↔ 正文引用 10938 个，零缺失、裸 img 0；孤儿 10 个（未清理）；38 篇无图笔记经抽查确认原文真无图 |
-| 花叔（AlchainHust / 小猫补光灯作者 / AI Native Coder） | 3095 | 386 | **386 篇** | 4991 张下载、0 失败 | attachments 4980 ↔ 引用 4980，零缺失零孤儿、裸 img 0；41 篇无图笔记抽 8 篇回查确认原文纯文字。跨度 2018-12~2026-10，约 198 万字，attachments 目录 2.4G（GIF 多，留意磁盘） |
-| 快刀青衣（得到联合创始人 / AI 应用） | 2431 | 298 | **298 篇** | 1876 张本地化 | attachments 1876 ↔ 引用 1876，零缺失零孤儿、裸 img 0；34 篇无图笔记抽查确认原文真无图。跨度 2014-01~2026-10，约 127.9 万字 |
-| 橘AI（Orange AI，原名「橘子汽水铺」） | 3999 | 546 | **546 篇**（后又增量 +2 = 548） | 3135 张本地化、0 失败 | attachments 3135 ↔ 引用 3135，零缺失零孤儿、裸 img 0；264 篇无图笔记抽 8 篇回查（`js_content` 与 `content_noencode` 两种壳都查）确认原文纯文字。跨度 2024-05~2026-10，约 74.6 万字，attachments 1.25G |
-| 夙愿的AI实验室（夙愿学长 / AI 工具测评） | 1492 | 202 | **197 篇** | 3725 张下载、0 失败 | attachments 3192 ↔ 引用 3192，零缺失零孤儿、裸 img 0；26 篇无图笔记抽 8 篇回查确认原文真无图。跨度 2024-02~2026-09，约 66.7 万字，attachments 1.05G。5 条 sn 残缺链接为「参数错误」空壳已删；同名重发（mid 2247484852 / 2247484855）两篇都保留、加日期后缀区分 |
+| 某私域/流量博主 | 3673 | 197 | **187 篇** | 574 张本地化 | attachments 485 ↔ 引用 485，零缺失零孤儿（10 条链接已失效，抓出来是「参数错误」空壳，已丢弃） |
+| 某出海/SEO 博主 | 5518 | 762 | **741 篇** | 11746 张本地化 | attachments 10948 ↔ 引用 10938，零缺失、裸 img 0；孤儿 10 个（未清理）；38 篇无图笔记抽查确认原文真无图 |
+| 某 AI Native Coder | 3095 | 386 | **386 篇** | 4991 张下载、0 失败 | attachments 4980 ↔ 引用 4980，零缺失零孤儿、裸 img 0；41 篇无图抽 8 篇回查确认真无图。跨度 2018-12~2026-10，约 198 万字，attachments 2.4G（GIF 多，留意磁盘） |
+| 某知识付费/AI 应用博主 | 2431 | 298 | **298 篇** | 1876 张本地化 | attachments 1876 ↔ 引用 1876，零缺失零孤儿、裸 img 0；34 篇无图抽查确认真无图。跨度 2014-01~2026-10，约 127.9 万字 |
+| 某 AI 资讯号 | 3999 | 546 | **546 篇**（后又增量 +2 = 548） | 3135 张本地化、0 失败 | attachments 3135 ↔ 引用 3135，零缺失零孤儿、裸 img 0；264 篇无图抽 8 篇回查（`js_content` 与 `content_noencode` 两种壳都查）确认真无图。跨度 2024-05~2026-10，约 74.6 万字，attachments 1.25G |
+| 某 AI 工具测评号 | 1492 | 202 | **197 篇** | 3725 张下载、0 失败 | attachments 3192 ↔ 引用 3192，零缺失零孤儿、裸 img 0；26 篇无图抽 8 篇回查确认真无图。跨度 2024-02~2026-09，约 66.7 万字，attachments 1.05G。5 条 sn 残缺链接为「参数错误」空壳已删；同名重发（mid 2247484852 / 2247484855）两篇都保留、加日期后缀区分 |
 
-> **提速与增量改造（2026-10-21）**：橘AI 这 546 篇是改造前的最后一次全量跑（约 40 分钟）：
+> **提速与增量改造（2026-10-21）**：546 篇那次是改造前的最后一次全量跑（约 40 分钟）：
 > 内存扫描 2m48s + 归属校验 10m09s + 抓取 26m。改造后同样的量预计 **8~10 分钟**——
 > 扫描改多进程 45s、校验并发 8 + 抽样、抓取并发 6（实测 60 篇 49s，改造前 546 篇 26m）。
 > 之后每次增量：扫描 45s + 抓几篇，约 1 分钟。
 
-> 快刀青衣这批是 chksm 坑的发现场景：`clean_links.py` 旧版丢掉 chksm 后 298 条
+> 知识付费那个号是 chksm 坑的发现场景：`clean_links.py` 旧版丢掉 chksm 后 298 条
 > **全部**返回 17.7KB 空壳，一度误判成「文章全被删」；靠 `mem_ctx_scan.py` 定 biz、
 > `extract_chksm_links.py` 重提链接才跑通。相关修复已并入 `clean_links.py`。
 
-> 第二行的 63 篇「无图笔记」经回原文抽查（`data-src` 计数与 `picture_page_info_list` 均为空），
+> 私域/流量那个号的 63 篇「无图笔记」经回原文抽查（`data-src` 计数与 `picture_page_info_list` 均为空），
 > 确认原文就是纯文字，不是抓取漏图 —— 详见 Step 4 的判定口径。

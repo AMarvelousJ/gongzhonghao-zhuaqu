@@ -3,7 +3,7 @@
 """把正文里残留的**非微信图床**外链图片下载并本地化。
 
 背景：wechat_to_obsidian.py 只处理 mmbiz.qpic.cn / mmbiz.qlogo.cn 这类微信图。
-少数老文章里作者直接贴了外部图床（实测「快刀青衣」2014 年几篇用了
+少数老文章里作者直接贴了外部图床（实测某号 2014 年几篇用了
 img.huxiu.com / u.img.huxiu.com），这些图会以裸 http 外链留在正文里，
 check_images.py 会把它算成「引用了但磁盘上没有」，fix_remote.py 又救不了
 （它只认 http 开头的引用，认不出已经被改写成本地路径的）。
