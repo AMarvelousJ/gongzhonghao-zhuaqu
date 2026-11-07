@@ -622,7 +622,8 @@ def build_output(article: Article, vault: Path, account: str,
     if article.author:
         fm_lines.append(f"author: \"{article.author}\"")
     if article.source:
-        fm_lines.append(f"source: {article.source}")
+        # 内存/HTML 里抓到的链接常常带 &amp;，直接写进 frontmatter 就成了坏链
+        fm_lines.append(f"source: {html_lib.unescape(article.source)}")
     fm_lines.append("type: 公众号文章")
     fm_lines.append(f"tags: [公众号/{account}]")
     fm_lines.append(f"imported: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
